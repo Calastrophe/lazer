@@ -1,4 +1,4 @@
-use crossbeam_channel::{Receiver, RecvError, SendError, Sender};
+use crossbeam_channel::{Receiver, RecvError, SendError, Sender, TryRecvError};
 
 #[derive(Debug)]
 pub struct Channel<S, R> {
@@ -13,6 +13,10 @@ impl<S, R> Channel<S, R> {
 
     pub fn recv(&self) -> Result<R, RecvError> {
         self.receiver.recv()
+    }
+
+    pub fn try_recv(&self) -> Result<R, TryRecvError> {
+        self.receiver.try_recv()
     }
 }
 

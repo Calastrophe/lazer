@@ -1,7 +1,8 @@
-use csv::Writer;
-use std::collections::VecDeque;
-use std::fs::File;
-use std::time::{SystemTime, UNIX_EPOCH};
+use crossbeam_channel::TryRecvError;
+use std::{
+    collections::VecDeque,
+    sync::{Arc, RwLock},
+};
 
 use bidirectional::Channel;
 use codec::Reading;
@@ -12,6 +13,7 @@ mod bidirectional;
 mod codec;
 mod worker;
 
+#[derive(Debug, PartialEq)]
 pub enum Plotting {
     Reference,
     Measured,
@@ -21,48 +23,48 @@ pub enum Plotting {
 
 pub struct Serial {
     pub(crate) channel: Channel<Message, Event>,
-    plotting: Plotting,
-    file: Writer<File>,
-    data: VecDeque<Reading>,
+    pub(crate) plotting: Plotting,
+    data: Arc<RwLock<VecDeque<Reading>>>,
 }
 
 impl Serial {
     /// Attempts to open the given serial port, returning an error if it fails to connect.
-    pub fn new(ctx: egui::Context, port: &str) -> Result<Self, std::io::Error> {
-        let epoch = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
-        let file = File::create(format!("log-{epoch}.csv"))?;
+    pub fn new(ctx: egui::Context, port: &str, path: String) -> Result<Self, std::io::Error> {
+        let data = Arc::new(RwLock::new(VecDeque::with_capacity(60)));
 
         Ok(Self {
-            file: Writer::from_writer(file),
+            channel: worker::connect(ctx, port, path, data.clone())?,
             plotting: Plotting::Measured,
-            channel: worker::connect(ctx, port)?,
-            data: VecDeque::with_capacity(60),
+            data,
         })
     }
 
-    /// Appends a new value to the plot, getting rid of one if at 60.
-    pub fn update(&mut self, reading: Reading) {
-        if self.data.len() >= 60 {
-            self.data.pop_back();
+    pub fn is_disconnected(&self, toasts: &mut egui_notify::Toasts) -> bool {
+        match self.channel.try_recv() {
+            Ok(event) => match event {
+                Event::Disconnected => {
+                    toasts.info("Successfully disconnected!");
+                    true
+                }
+                Event::Errored => {
+                    toasts.error("An error occurred when reading!");
+                    true
+                }
+            },
+            Err(TryRecvError::Disconnected) => {
+                toasts.error("The worker dropped without telling us...");
+                true
+            }
+            Err(_) => false,
         }
-
-        // Ignore if it fails...
-        let _ = self.file.serialize(reading);
-
-        self.data.push_front(reading)
-    }
-
-    pub fn set_plot(&mut self, plot: Plotting) {
-        self.plotting = plot;
     }
 
     /// Show a plot of the current serial readings
     pub fn show(&self, ui: &mut egui::Ui) {
         let points: PlotPoints = self
             .data
+            .read()
+            .unwrap()
             .iter()
             .enumerate()
             .map(|(i, r)| {
@@ -80,7 +82,7 @@ impl Serial {
         Plot::new("serial_plot")
             .show_x(false)
             .show_grid(false)
-            .view_aspect(2.0)
+            .show_axes([false, true])
             .show(ui, |plot_ui| plot_ui.line(Line::new(points)));
     }
 }
