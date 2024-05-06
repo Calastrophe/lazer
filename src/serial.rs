@@ -9,6 +9,8 @@ use codec::Reading;
 use egui_plot::{Line, Plot, PlotPoints};
 pub use worker::{Event, Message};
 
+pub const MAX_SAMPLES: usize = 60;
+
 mod bidirectional;
 mod codec;
 mod worker;
@@ -30,7 +32,7 @@ pub struct Serial {
 impl Serial {
     /// Attempts to open the given serial port, returning an error if it fails to connect.
     pub fn new(ctx: egui::Context, port: &str, path: String) -> Result<Self, std::io::Error> {
-        let data = Arc::new(RwLock::new(VecDeque::with_capacity(60)));
+        let data = Arc::new(RwLock::new(VecDeque::with_capacity(MAX_SAMPLES)));
 
         Ok(Self {
             channel: worker::connect(ctx, port, path, data.clone())?,
@@ -80,6 +82,7 @@ impl Serial {
             .collect();
 
         Plot::new("serial_plot")
+            .view_aspect(5.0)
             .show_x(false)
             .show_grid(false)
             .show_axes([false, true])

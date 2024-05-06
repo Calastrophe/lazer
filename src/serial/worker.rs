@@ -1,6 +1,7 @@
 use super::{
     bidirectional::{channel, Channel},
     codec::{LaserCodec, Reading},
+    MAX_SAMPLES,
 };
 use crossbeam_channel::select;
 use csv::Writer;
@@ -90,7 +91,7 @@ pub fn connect(
                                 {
                                     let mut data = data.write().unwrap();
 
-                                    if data.len() >= 60 {
+                                    if data.len() >= MAX_SAMPLES {
                                         data.pop_front();
                                     }
 
