@@ -1,3 +1,5 @@
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
+
 use eframe::egui;
 use egui::Button;
 use egui_notify::Toasts;
@@ -46,26 +48,34 @@ impl eframe::App for Laser {
                         let _ = serial.channel.send(Message::Resume);
                     };
 
+                    ui.add(egui::DragValue::new(&mut serial.sampling_rate).clamp_range(1000..=10000).speed(10.0));
+
+                    // TODO: Only show this if there is a detected change in the sampling rate which hasn't been saved.
+                    if ui.add(egui::Button::new("Set")).clicked() {
+                        let _ = serial.channel.send(Message::ModifySampleRate(serial.sampling_rate));
+                    }
+
+
                     egui::ComboBox::from_label("")
-                        .selected_text(format!("{:?}", serial.plotting))
+                        .selected_text(format!("{:?}", serial.selected_plot))
                         .show_ui(ui, |ui| {
                             ui.selectable_value(
-                                &mut serial.plotting,
+                                &mut serial.selected_plot,
                                 Plotting::Reference,
                                 "Reference",
                             );
                             ui.selectable_value(
-                                &mut serial.plotting,
+                                &mut serial.selected_plot,
                                 Plotting::Measured,
                                 "Measured",
                             );
                             ui.selectable_value(
-                                &mut serial.plotting,
+                                &mut serial.selected_plot,
                                 Plotting::Velocity,
                                 "Velocity",
                             );
                             ui.selectable_value(
-                                &mut serial.plotting,
+                                &mut serial.selected_plot,
                                 Plotting::Displacement,
                                 "Displacement",
                             );

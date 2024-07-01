@@ -8,12 +8,13 @@ use tokio_util::codec::Decoder;
 pub struct Reading {
     pub(crate) reference: i64,
     pub(crate) measured: i64,
-    pub(crate) displacement: i64,
+    pub(crate) total_displacement: i64,
     pub(crate) velocity: i64,
     pub(crate) zero: i64,
     pub(crate) sequence_num: i64,
     pub(crate) code: i64,
     pub(crate) data: i64,
+    pub(crate) displacement: f64,
 }
 
 impl TryFrom<&str> for Reading {
@@ -25,12 +26,15 @@ impl TryFrom<&str> for Reading {
         Ok(Reading {
             reference: next_field("reference", &mut iter)?,
             measured: next_field("measured", &mut iter)?,
-            displacement: next_field("displacement", &mut iter)?,
+            total_displacement: next_field("displacement", &mut iter)?,
             velocity: next_field("velocity", &mut iter)?,
             zero: next_field("zero", &mut iter)?,
             sequence_num: next_field("sequence_num", &mut iter)?,
             code: next_field("code", &mut iter)?,
             data: next_field("data", &mut iter)?,
+            
+            // Calculated by the worker thread with a previous reading.
+            displacement: 0.0,
         })
     }
 }

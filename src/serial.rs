@@ -10,6 +10,7 @@ use egui_plot::{Line, Plot, PlotPoints};
 pub use worker::{Event, Message};
 
 pub const MAX_SAMPLES: usize = 60;
+const DEFAULT_SAMPLING_RATE: u64 = 1000;
 
 mod bidirectional;
 mod codec;
@@ -25,19 +26,21 @@ pub enum Plotting {
 
 pub struct Serial {
     pub(crate) channel: Channel<Message, Event>,
-    pub(crate) plotting: Plotting,
-    data: Arc<RwLock<VecDeque<Reading>>>,
+    pub(crate) selected_plot: Plotting,
+    pub(crate) sampling_rate: u64,
+    readings: Arc<RwLock<VecDeque<Reading>>>,
 }
 
 impl Serial {
     /// Attempts to open the given serial port, returning an error if it fails to connect.
     pub fn new(ctx: egui::Context, port: &str, path: String) -> Result<Self, std::io::Error> {
-        let data = Arc::new(RwLock::new(VecDeque::with_capacity(MAX_SAMPLES)));
+        let readings = Arc::new(RwLock::new(VecDeque::with_capacity(MAX_SAMPLES)));
 
         Ok(Self {
-            channel: worker::connect(ctx, port, path, data.clone())?,
-            plotting: Plotting::Measured,
-            data,
+            channel: worker::connect(ctx, port, DEFAULT_SAMPLING_RATE, path, readings.clone())?,
+            selected_plot: Plotting::Measured,
+            sampling_rate: DEFAULT_SAMPLING_RATE,
+            readings,
         })
     }
 
@@ -54,7 +57,7 @@ impl Serial {
                 }
             },
             Err(TryRecvError::Disconnected) => {
-                toasts.error("The worker dropped without telling us...");
+                toasts.error("The worker thread dropped without telling us...");
                 true
             }
             Err(_) => false,
@@ -64,20 +67,19 @@ impl Serial {
     /// Show a plot of the current serial readings
     pub fn show(&self, ui: &mut egui::Ui) {
         let points: PlotPoints = self
-            .data
+            .readings
             .read()
             .unwrap()
             .iter()
             .enumerate()
             .map(|(i, r)| {
-                let v = match self.plotting {
-                    Plotting::Reference => r.reference,
-                    Plotting::Measured => r.measured,
-                    Plotting::Velocity => r.velocity,
-                    Plotting::Displacement => r.displacement,
-                };
+                match self.selected_plot {
+                    Plotting::Reference => [i as f64, r.reference as f64],
+                    Plotting::Measured => [i as f64, r.measured as f64],
+                    Plotting::Velocity => [i as f64, r.velocity as f64],
+                    Plotting::Displacement => [i as f64, r.displacement],
+                }
 
-                [i as f64, v as f64]
             })
             .collect();
 

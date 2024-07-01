@@ -11,6 +11,7 @@ impl<S, R> Channel<S, R> {
         self.sender.send(s)
     }
 
+    #[allow(unused)]
     pub fn recv(&self) -> Result<R, RecvError> {
         self.receiver.recv()
     }
