@@ -48,14 +48,6 @@ impl eframe::App for Laser {
                         let _ = serial.channel.send(Message::Resume);
                     };
 
-                    ui.add(egui::DragValue::new(&mut serial.sampling_rate).clamp_range(1000..=10000).speed(10.0));
-
-                    // TODO: Only show this if there is a detected change in the sampling rate which hasn't been saved.
-                    if ui.add(egui::Button::new("Set")).clicked() {
-                        let _ = serial.channel.send(Message::ModifySampleRate(serial.sampling_rate));
-                    }
-
-
                     egui::ComboBox::from_label("")
                         .selected_text(format!("{:?}", serial.selected_plot))
                         .show_ui(ui, |ui| {

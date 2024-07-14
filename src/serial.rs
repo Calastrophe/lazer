@@ -10,7 +10,6 @@ use egui_plot::{Line, Plot, PlotPoints};
 pub use worker::{Event, Message};
 
 pub const MAX_SAMPLES: usize = 60;
-const DEFAULT_SAMPLING_RATE: u64 = 1000;
 
 mod bidirectional;
 mod codec;
@@ -27,7 +26,6 @@ pub enum Plotting {
 pub struct Serial {
     pub(crate) channel: Channel<Message, Event>,
     pub(crate) selected_plot: Plotting,
-    pub(crate) sampling_rate: u64,
     readings: Arc<RwLock<VecDeque<Reading>>>,
 }
 
@@ -37,9 +35,8 @@ impl Serial {
         let readings = Arc::new(RwLock::new(VecDeque::with_capacity(MAX_SAMPLES)));
 
         Ok(Self {
-            channel: worker::connect(ctx, port, DEFAULT_SAMPLING_RATE, path, readings.clone())?,
+            channel: worker::connect(ctx, port, path, readings.clone())?,
             selected_plot: Plotting::Measured,
-            sampling_rate: DEFAULT_SAMPLING_RATE,
             readings,
         })
     }
@@ -72,14 +69,11 @@ impl Serial {
             .unwrap()
             .iter()
             .enumerate()
-            .map(|(i, r)| {
-                match self.selected_plot {
-                    Plotting::Reference => [i as f64, r.reference as f64],
-                    Plotting::Measured => [i as f64, r.measured as f64],
-                    Plotting::Velocity => [i as f64, r.velocity as f64],
-                    Plotting::Displacement => [i as f64, r.displacement],
-                }
-
+            .map(|(i, r)| match self.selected_plot {
+                Plotting::Reference => [i as f64, r.reference as f64],
+                Plotting::Measured => [i as f64, r.measured as f64],
+                Plotting::Velocity => [i as f64, r.velocity as f64],
+                Plotting::Displacement => [i as f64, r.displacement],
             })
             .collect();
 

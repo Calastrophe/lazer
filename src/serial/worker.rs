@@ -6,7 +6,6 @@ use super::{
 use crossbeam_channel::select;
 use csv::Writer;
 use futures::StreamExt;
-use tokio::time::{sleep, Duration};
 use std::{
     collections::VecDeque,
     fs::File,
@@ -14,15 +13,15 @@ use std::{
     sync::{Arc, RwLock},
     time::{SystemTime, UNIX_EPOCH},
 };
+use tokio::time::{sleep, Duration};
 use tokio_serial::SerialPortBuilderExt;
 use tokio_util::codec::Decoder;
-use tracing::{warn, info};
+use tracing::warn;
 
 const BAUD_RATE: u32 = 2000000;
 const DISPLACEMENT: f64 = 79.2;
 
 pub enum Message {
-    ModifySampleRate(u64),
     Disconnect,
     Pause,
     Resume,
@@ -36,7 +35,6 @@ pub enum Event {
 pub fn connect(
     ctx: egui::Context,
     port: &str,
-    initial_sample_rate: u64,
     path: String,
     readings: Arc<RwLock<VecDeque<Reading>>>,
 ) -> Result<Channel<Message, Event>, io::Error> {
@@ -50,33 +48,11 @@ pub fn connect(
         let mut framed = LaserCodec.framed(serial);
         let mut running = true;
 
-        // The interval needed to perform said amount of reads in a second.
-        let mut sampling_interval = Duration::from_millis(1000 / initial_sample_rate);
-
         loop {
             select! {
                 recv(worker.receiver) -> msg => {
                     match msg {
                         Ok(message) => match message {
-                            Message::ModifySampleRate(new) => {
-                                info!("The sampling rate has been changed to {} reads per second.", new);
-
-                                sampling_interval = Duration::from_millis(1000 / new);
-
-                                // If we adjust the sample rate, we create a new log file.
-                                // Otherwise, it would be confusing to differ between different sampling rates.
-                                log = match create_log(&path) {
-                                    Ok(log) => log,
-                                    Err(e) => {
-                                        let _ = worker.send(Event::Errored);
-                                        ctx.request_repaint();
-
-                                        warn!("Killing worker thread due to: {e}");
-
-                                        return;
-                                    }
-                                };
-                            }
                             Message::Pause => running = false,
                             Message::Resume => {
                                 log = match create_log(&path) {
@@ -117,7 +93,7 @@ pub fn connect(
                     if let Some(reading) = framed.next().await {
                         match reading {
                             Ok(mut reading) => {
-                                
+
                                 {
                                     let readings = readings.read().unwrap();
 
@@ -126,7 +102,6 @@ pub fn connect(
                                     // The 'as' will totally not backfire if the number grows large enough...
                                     reading.displacement = (reading.total_displacement - prev_total_displacement) as f64 * DISPLACEMENT;
                                 }
-
 
                                 {
                                     let mut readings = readings.write().unwrap();
@@ -152,8 +127,6 @@ pub fn connect(
                             }
                         }
                     }
-
-                    sleep(sampling_interval).await;
                 }
             }
         }
