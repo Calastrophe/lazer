@@ -1,11 +1,13 @@
 use std::io::{Error, ErrorKind};
 use std::str::{from_utf8, SplitWhitespace};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use serde::Serialize;
 use tokio_util::codec::Decoder;
 
 #[derive(Serialize, Default, Debug, Clone, Copy)]
 pub struct Reading {
+    pub(crate) timestamp: Duration,
     pub(crate) reference: i64,
     pub(crate) measured: i64,
     pub(crate) total_displacement: i64,
@@ -24,6 +26,7 @@ impl TryFrom<&str> for Reading {
         let mut iter = s.split_whitespace();
 
         Ok(Reading {
+            timestamp: SystemTime::now().duration_since(UNIX_EPOCH).unwrap(),
             reference: next_field("reference", &mut iter)?,
             measured: next_field("measured", &mut iter)?,
             total_displacement: next_field("displacement", &mut iter)?,
@@ -32,7 +35,7 @@ impl TryFrom<&str> for Reading {
             sequence_num: next_field("sequence_num", &mut iter)?,
             code: next_field("code", &mut iter)?,
             data: next_field("data", &mut iter)?,
-            
+
             // Calculated by the worker thread with a previous reading.
             displacement: 0.0,
         })

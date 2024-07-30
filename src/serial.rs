@@ -90,8 +90,8 @@ pub fn available_ports() -> Option<Vec<String>> {
     Some(
         tokio_serial::available_ports()
             .ok()?
-            .iter()
-            .map(|p| p.port_name.clone())
+            .into_iter()
+            .map(|p| p.port_name)
             .collect(),
     )
 }
