@@ -1,22 +1,20 @@
 use super::{
     bidirectional::{channel, Channel},
     codec::{LaserCodec, Reading},
+    logger::{logger, Command},
     MAX_SAMPLES,
 };
 use crossbeam_channel::select;
-use csv::Writer;
 use futures::StreamExt;
 use std::{
     collections::VecDeque,
-    fs::File,
     io,
     sync::{Arc, RwLock},
-    time::{SystemTime, UNIX_EPOCH},
 };
-use tokio::time::{sleep, Duration};
+use tokio::time::{sleep, Duration, Instant};
 use tokio_serial::SerialPortBuilderExt;
 use tokio_util::codec::Decoder;
-use tracing::warn;
+use tracing::{debug, warn};
 
 const BAUD_RATE: u32 = 2000000;
 const DISPLACEMENT: f64 = 79.2;
@@ -40,7 +38,7 @@ pub fn connect(
 ) -> Result<Channel<Message, Event>, io::Error> {
     let serial = tokio_serial::new(port, BAUD_RATE).open_native_async()?;
 
-    let mut log = create_log(&path)?;
+    let tx = logger(path)?;
 
     let (master, worker) = channel();
 
@@ -55,21 +53,12 @@ pub fn connect(
                         Ok(message) => match message {
                             Message::Pause => running = false,
                             Message::Resume => {
-                                log = match create_log(&path) {
-                                    Ok(log) => log,
-                                    Err(e) => {
-                                        let _ = worker.send(Event::Errored);
-                                        ctx.request_repaint();
-
-                                        warn!("Killing worker thread due to: {e}");
-
-                                        return;
-                                    }
-                                };
+                                let _ = tx.send(Command::NewFile);
 
                                 running = true;
                             },
                             Message::Disconnect => {
+                                let _ = tx.send(Command::Kill);
                                 let _ = worker.send(Event::Disconnected);
                                 ctx.request_repaint();
 
@@ -90,6 +79,8 @@ pub fn connect(
                         continue;
                     }
 
+                    let start = Instant::now();
+
                     if let Some(reading) = framed.next().await {
                         match reading {
                             Ok(mut reading) => {
@@ -103,6 +94,8 @@ pub fn connect(
                                     reading.displacement = (reading.total_displacement - prev_total_displacement) as f64 * DISPLACEMENT;
                                 }
 
+                                let _ = tx.try_send(Command::Write(reading));
+
                                 {
                                     let mut readings = readings.write().unwrap();
 
@@ -112,8 +105,6 @@ pub fn connect(
 
                                     readings.push_back(reading);
                                 }
-
-                                let _  = log.serialize(reading);
 
                                 ctx.request_repaint();
                             }
@@ -128,6 +119,8 @@ pub fn connect(
                         }
                     }
 
+                    let duration = start.elapsed();
+                    debug!("The entire read took: {duration:?}");
 
                 }
             }
@@ -135,15 +128,4 @@ pub fn connect(
     });
 
     Ok(master)
-}
-
-fn create_log(path: &str) -> Result<Writer<File>, io::Error> {
-    let epoch = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_secs();
-
-    Ok(Writer::from_writer(File::create(format!(
-        "{path}/log-{epoch}.csv"
-    ))?))
 }

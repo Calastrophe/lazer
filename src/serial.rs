@@ -7,13 +7,14 @@ use std::{
 use bidirectional::Channel;
 use codec::Reading;
 use egui_plot::{Line, Plot, PlotPoints};
-pub use worker::{Event, Message};
+pub use reader::{Event, Message};
 
 pub const MAX_SAMPLES: usize = 60;
 
 mod bidirectional;
 mod codec;
-mod worker;
+mod logger;
+mod reader;
 
 #[derive(Debug, PartialEq)]
 pub enum Plotting {
@@ -35,7 +36,7 @@ impl Serial {
         let readings = Arc::new(RwLock::new(VecDeque::with_capacity(MAX_SAMPLES)));
 
         Ok(Self {
-            channel: worker::connect(ctx, port, path, readings.clone())?,
+            channel: reader::connect(ctx, port, path, readings.clone())?,
             selected_plot: Plotting::Measured,
             readings,
         })
